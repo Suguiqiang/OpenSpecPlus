@@ -1,3 +1,20 @@
+/**
+ * Schema 解析器模块
+ *
+ * 本模块负责把 schema 名称（如 "spec-driven"）解析成 SchemaYaml 对象，
+ * 支持 3 层 schema 来源（按优先级从高到低）：
+ *   1. 项目级 schema：<projectRoot>/openspec/schemas/<name>/schema.yaml
+ *   2. 用户级 schema：${XDG_DATA_HOME}/openspec/schemas/<name>/schema.yaml
+ *   3. 包级 schema：<package>/schemas/<name>/schema.yaml（OpenSpec 内置）
+ *
+ * 这种分层设计允许：
+ *   - 项目用自己定制的 schema 覆盖内置 schema
+ *   - 用户在多个项目间共享自定义 schema
+ *   - 内置 schema 作为兜底
+ *
+ * 调用方：instruction-loader.ts、commands/workflow/*、utils/change-metadata.ts
+ */
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,12 +23,17 @@ import { parseSchema, SchemaValidationError } from './schema.js';
 import type { SchemaYaml } from './types.js';
 
 /**
- * Error thrown when loading a schema fails.
+ * Schema 加载错误
+ *
+ * 当 schema 文件不存在、无法读取、或解析校验失败时抛出。
+ * 携带 schemaPath 和原始 cause 用于调试。
  */
 export class SchemaLoadError extends Error {
   constructor(
     message: string,
+    /** 出错的 schema.yaml 文件路径 */
     public readonly schemaPath: string,
+    /** 原始错误（IO 错误或 SchemaValidationError） */
     public readonly cause?: Error
   ) {
     super(message);
@@ -20,79 +42,99 @@ export class SchemaLoadError extends Error {
 }
 
 /**
- * Gets the package's built-in schemas directory path.
- * Uses import.meta.url to resolve relative to the current module.
+ * 获取 OpenSpec 包内置的 schemas 目录路径
+ *
+ * 使用 import.meta.url 定位当前模块，然后回溯到包根目录的 schemas/。
+ * 路径计算：dist/core/artifact-graph/resolver.js -> ../../../schemas/
+ *
+ * @returns 包内置 schemas 目录的绝对路径
  */
 export function getPackageSchemasDir(): string {
   const currentFile = fileURLToPath(import.meta.url);
-  // Navigate from dist/core/artifact-graph/ to package root's schemas/
+  // 从 dist/core/artifact-graph/ 回溯到包根目录，再进入 schemas/
   return path.join(path.dirname(currentFile), '..', '..', '..', 'schemas');
 }
 
 /**
- * Gets the user's schema override directory path.
+ * 获取用户级 schema 覆盖目录路径
+ *
+ * 位于全局数据目录下（XDG_DATA_HOME 或平台等价目录）。
+ * 用户可以在这里放自定义 schema，在多个项目间共享。
+ *
+ * @returns 用户级 schemas 目录的绝对路径
  */
 export function getUserSchemasDir(): string {
   return path.join(getGlobalDataDir(), 'schemas');
 }
 
 /**
- * Gets the project-local schemas directory path.
- * @param projectRoot - The project root directory
- * @returns The path to the project's schemas directory
+ * 获取项目级 schemas 目录路径
+ *
+ * 位于项目根目录的 openspec/schemas/ 下，
+ * 项目可以用它覆盖用户级和包级 schema。
+ *
+ * @param projectRoot - 项目根目录
+ * @returns 项目级 schemas 目录的绝对路径
  */
 export function getProjectSchemasDir(projectRoot: string): string {
   return path.join(projectRoot, 'openspec', 'schemas');
 }
 
 /**
- * Determines whether a directory entry represents a schema directory candidate.
+ * 判断目录条目是否是一个 schema 目录候选
  *
- * Returns true for real directories and for symlinks whose target is a
- * directory. `fs.Dirent.isDirectory()` reports the raw entry type, so a symlink
- * (even one pointing at a directory) has `isDirectory() === false`; we
- * dereference such entries via `fs.statSync` to admit symlinked schema dirs
- * while still rejecting symlinks-to-files and broken/dangling symlinks.
+ * 返回 true 的条件（满足任一）：
+ *   1. 是真实目录（entry.isDirectory() === true）
+ *   2. 是符号链接，且链接目标是一个目录
  *
- * @param parentDir - The directory containing the entry
- * @param entry - The directory entry from `fs.readdirSync(..., { withFileTypes: true })`
+ * 为什么要处理符号链接？
+ *   fs.Dirent.isDirectory() 报告的是原始条目类型，
+ *   符号链接（即使指向目录）的 isDirectory() 是 false。
+ *   我们用 statSync 跟随链接，让符号链接的 schema 目录也能被识别，
+ *   但仍然拒绝指向文件的符号链接和断链（dangling symlink）。
+ *
+ * @param parentDir - 包含该条目的父目录
+ * @param entry - 从 readdirSync({ withFileTypes: true }) 获取的目录条目
+ * @returns true 表示是 schema 目录候选
  */
 export function isSchemaDir(parentDir: string, entry: fs.Dirent): boolean {
+  // 情况 1：真实目录
   if (entry.isDirectory()) {
     return true;
   }
+  // 情况 2：符号链接，跟随链接检查目标类型
   if (entry.isSymbolicLink()) {
     try {
-      // statSync follows the link; isDirectory() reflects the target type.
+      // statSync 会跟随符号链接，isDirectory() 反映目标类型
       return fs.statSync(path.join(parentDir, entry.name)).isDirectory();
     } catch {
-      // Broken symlink (dangling target) — statSync throws; treat as non-dir.
+      // 断链（目标不存在）statSync 会抛错，视为非目录
       return false;
     }
   }
+  // 其他类型（文件等）都不是 schema 目录
   return false;
 }
 
 /**
- * Resolves a schema name to its directory path.
+ * 根据 schema 名解析出 schema 目录路径
  *
- * Resolution order (when projectRoot is provided):
- * 1. Project-local: <projectRoot>/openspec/schemas/<name>/schema.yaml
- * 2. User override: ${XDG_DATA_HOME}/openspec/schemas/<name>/schema.yaml
- * 3. Package built-in: <package>/schemas/<name>/schema.yaml
+ * 解析顺序（projectRoot 提供时）：
+ *   1. 项目级：<projectRoot>/openspec/schemas/<name>/schema.yaml
+ *   2. 用户级：${XDG_DATA_HOME}/openspec/schemas/<name>/schema.yaml
+ *   3. 包级：<package>/schemas/<name>/schema.yaml
  *
- * When projectRoot is not provided, only user override and package built-in are checked
- * (backward compatible behavior).
+ * projectRoot 未提供时，只检查用户级和包级（向后兼容）。
  *
- * @param name - Schema name (e.g., "spec-driven")
- * @param projectRoot - Optional project root directory for project-local schema resolution
- * @returns The path to the schema directory, or null if not found
+ * @param name - schema 名称（如 "spec-driven"）
+ * @param projectRoot - 可选的项目根目录
+ * @returns schema 目录的绝对路径，找不到返回 null
  */
 export function getSchemaDir(
   name: string,
   projectRoot?: string
 ): string | null {
-  // 1. Check project-local directory (if projectRoot provided)
+  // 1. 检查项目级 schema 目录
   if (projectRoot) {
     const projectDir = path.join(getProjectSchemasDir(projectRoot), name);
     const projectSchemaPath = path.join(projectDir, 'schema.yaml');
@@ -101,45 +143,48 @@ export function getSchemaDir(
     }
   }
 
-  // 2. Check user override directory
+  // 2. 检查用户级 schema 目录
   const userDir = path.join(getUserSchemasDir(), name);
   const userSchemaPath = path.join(userDir, 'schema.yaml');
   if (fs.existsSync(userSchemaPath)) {
     return userDir;
   }
 
-  // 3. Check package built-in directory
+  // 3. 检查包内置 schema 目录
   const packageDir = path.join(getPackageSchemasDir(), name);
   const packageSchemaPath = path.join(packageDir, 'schema.yaml');
   if (fs.existsSync(packageSchemaPath)) {
     return packageDir;
   }
 
+  // 三层都找不到
   return null;
 }
 
 /**
- * Resolves a schema name to a SchemaYaml object.
+ * 根据 schema 名解析出 SchemaYaml 对象
  *
- * Resolution order (when projectRoot is provided):
- * 1. Project-local: <projectRoot>/openspec/schemas/<name>/schema.yaml
- * 2. User override: ${XDG_DATA_HOME}/openspec/schemas/<name>/schema.yaml
- * 3. Package built-in: <package>/schemas/<name>/schema.yaml
+ * 解析顺序同 getSchemaDir（项目级 > 用户级 > 包级）。
+ * 找到 schema.yaml 后读取内容，用 parseSchema 校验并返回。
  *
- * When projectRoot is not provided, only user override and package built-in are checked
- * (backward compatible behavior).
+ * 错误处理：
+ *   - schema 不存在：抛普通 Error（含可用 schema 列表）
+ *   - 文件读取失败：抛 SchemaLoadError（含路径和 cause）
+ *   - 解析校验失败：抛 SchemaLoadError（含路径和 SchemaValidationError）
  *
- * @param name - Schema name (e.g., "spec-driven")
- * @param projectRoot - Optional project root directory for project-local schema resolution
- * @returns The resolved schema object
- * @throws Error if schema is not found in any location
+ * @param name - schema 名称（如 "spec-driven"，可带 .yaml 后缀）
+ * @param projectRoot - 可选的项目根目录
+ * @returns 解析后的 SchemaYaml 对象
+ * @throws Error 如果 schema 不存在
+ * @throws SchemaLoadError 如果读取或解析失败
  */
 export function resolveSchema(name: string, projectRoot?: string): SchemaYaml {
-  // Normalize name (remove .yaml extension if provided)
+  // 规范化名称：去掉 .yaml / .yml 后缀（用户可能误传）
   const normalizedName = name.replace(/\.ya?ml$/, '');
 
   const schemaDir = getSchemaDir(normalizedName, projectRoot);
   if (!schemaDir) {
+    // 列出所有可用 schema 帮助用户排查
     const availableSchemas = listSchemas(projectRoot);
     throw new Error(
       `Schema '${normalizedName}' not found. Available schemas: ${availableSchemas.join(', ')}`
@@ -148,7 +193,7 @@ export function resolveSchema(name: string, projectRoot?: string): SchemaYaml {
 
   const schemaPath = path.join(schemaDir, 'schema.yaml');
 
-  // Load and parse the schema
+  // 读取 schema.yaml 文件内容
   let content: string;
   try {
     content = fs.readFileSync(schemaPath, 'utf-8');
@@ -161,16 +206,19 @@ export function resolveSchema(name: string, projectRoot?: string): SchemaYaml {
     );
   }
 
+  // 解析并校验 schema
   try {
     return parseSchema(content);
   } catch (err) {
     if (err instanceof SchemaValidationError) {
+      // 校验失败：包装成 SchemaLoadError
       throw new SchemaLoadError(
         `Invalid schema at '${schemaPath}': ${err.message}`,
         schemaPath,
         err
       );
     }
+    // 其他解析错误
     const parseError = err instanceof Error ? err : new Error(String(err));
     throw new SchemaLoadError(
       `Failed to parse schema at '${schemaPath}': ${parseError.message}`,
@@ -181,20 +229,23 @@ export function resolveSchema(name: string, projectRoot?: string): SchemaYaml {
 }
 
 /**
- * Lists all available schema names.
- * Combines project-local, user override, and package built-in schemas.
+ * 列出所有可用的 schema 名称
  *
- * @param projectRoot - Optional project root directory for project-local schema resolution
+ * 合并项目级、用户级、包级 schema，去重后按字典序排序。
+ *
+ * @param projectRoot - 可选的项目根目录
+ * @returns schema 名称数组（已排序）
  */
 export function listSchemas(projectRoot?: string): string[] {
   const schemas = new Set<string>();
 
-  // Add package built-in schemas
+  // 收集包级 schema
   const packageDir = getPackageSchemasDir();
   if (fs.existsSync(packageDir)) {
     for (const entry of fs.readdirSync(packageDir, { withFileTypes: true })) {
       if (isSchemaDir(packageDir, entry)) {
         const schemaPath = path.join(packageDir, entry.name, 'schema.yaml');
+        // 只收录有 schema.yaml 文件的目录
         if (fs.existsSync(schemaPath)) {
           schemas.add(entry.name);
         }
@@ -202,7 +253,7 @@ export function listSchemas(projectRoot?: string): string[] {
     }
   }
 
-  // Add user override schemas (may override package schemas)
+  // 收集用户级 schema（可能覆盖包级）
   const userDir = getUserSchemasDir();
   if (fs.existsSync(userDir)) {
     for (const entry of fs.readdirSync(userDir, { withFileTypes: true })) {
@@ -215,7 +266,7 @@ export function listSchemas(projectRoot?: string): string[] {
     }
   }
 
-  // Add project-local schemas (if projectRoot provided)
+  // 收集项目级 schema（如果提供了 projectRoot）
   if (projectRoot) {
     const projectDir = getProjectSchemasDir(projectRoot);
     if (fs.existsSync(projectDir)) {
@@ -234,26 +285,41 @@ export function listSchemas(projectRoot?: string): string[] {
 }
 
 /**
- * Schema info with metadata (name, description, artifacts).
+ * 带元数据的 schema 信息
+ *
+ * 用于 listSchemasWithInfo，给 AI agent 展示可选 schema 时使用。
  */
 export interface SchemaInfo {
+  /** schema 名称 */
   name: string;
+  /** schema 描述（来自 YAML 的 description 字段） */
   description: string;
+  /** 该 schema 包含的所有 artifact ID 列表 */
   artifacts: string[];
+  /** schema 来源：project（项目级）/ user（用户级）/ package（包级） */
   source: 'project' | 'user' | 'package';
 }
 
 /**
- * Lists all available schemas with their descriptions and artifact lists.
- * Useful for agent skills to present schema selection to users.
+ * 列出所有可用 schema 的完整信息（名称、描述、artifact 列表、来源）
  *
- * @param projectRoot - Optional project root directory for project-local schema resolution
+ * 与 listSchemas 不同：
+ *   - 返回 SchemaInfo 对象数组，不只是名称字符串
+ *   - 按"项目级 > 用户级 > 包级"优先级去重（高优先级覆盖低优先级）
+ *   - 会读取并解析每个 schema.yaml 获取 description 和 artifacts
+ *   - 解析失败的 schema 会被跳过（不影响其他 schema）
+ *
+ * 用途：给 AI agent skills 展示 schema 选择菜单
+ *
+ * @param projectRoot - 可选的项目根目录
+ * @returns SchemaInfo 数组（按名称字典序排序）
  */
 export function listSchemasWithInfo(projectRoot?: string): SchemaInfo[] {
   const schemas: SchemaInfo[] = [];
+  /** 已处理的 schema 名称（用于跨层级去重） */
   const seenNames = new Set<string>();
 
-  // Add project-local schemas first (highest priority, if projectRoot provided)
+  // 1. 优先收集项目级 schema（最高优先级）
   if (projectRoot) {
     const projectDir = getProjectSchemasDir(projectRoot);
     if (fs.existsSync(projectDir)) {
@@ -271,7 +337,7 @@ export function listSchemasWithInfo(projectRoot?: string): SchemaInfo[] {
               });
               seenNames.add(entry.name);
             } catch {
-              // Skip invalid schemas
+              // 解析失败的 schema 跳过，不影响其他
             }
           }
         }
@@ -279,7 +345,7 @@ export function listSchemasWithInfo(projectRoot?: string): SchemaInfo[] {
     }
   }
 
-  // Add user override schemas (if not overridden by project)
+  // 2. 收集用户级 schema（如果没被项目级覆盖）
   const userDir = getUserSchemasDir();
   if (fs.existsSync(userDir)) {
     for (const entry of fs.readdirSync(userDir, { withFileTypes: true })) {
@@ -296,14 +362,14 @@ export function listSchemasWithInfo(projectRoot?: string): SchemaInfo[] {
             });
             seenNames.add(entry.name);
           } catch {
-            // Skip invalid schemas
+            // 解析失败的 schema 跳过
           }
         }
       }
     }
   }
 
-  // Add package built-in schemas (if not overridden by project or user)
+  // 3. 收集包级 schema（如果没被项目级或用户级覆盖）
   const packageDir = getPackageSchemasDir();
   if (fs.existsSync(packageDir)) {
     for (const entry of fs.readdirSync(packageDir, { withFileTypes: true })) {
@@ -319,12 +385,13 @@ export function listSchemasWithInfo(projectRoot?: string): SchemaInfo[] {
               source: 'package',
             });
           } catch {
-            // Skip invalid schemas
+            // 解析失败的 schema 跳过
           }
         }
       }
     }
   }
 
+  // 按名称字典序排序
   return schemas.sort((a, b) => a.name.localeCompare(b.name));
 }
