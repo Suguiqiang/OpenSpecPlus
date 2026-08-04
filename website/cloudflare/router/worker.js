@@ -71,8 +71,8 @@ async function proxyDocs(request) {
 
 function isDocsRoute(pathname) {
   return (
-    pathname === '/docs' ||
-    pathname.startsWith('/docs/') ||
+    pathname === '/docs-cn' ||
+    pathname.startsWith('/docs-cn/') ||
     pathname.startsWith('/_next/') ||
     pathname === '/api/search' ||
     pathname === '/api/search/' ||

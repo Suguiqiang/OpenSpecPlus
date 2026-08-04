@@ -1,5 +1,5 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
-import { appName, links } from './shared';
+import { appName, docsRoute, links } from './shared';
 
 /**
  * Shared layout options for both the home (marketing) layout and the docs
@@ -18,7 +18,7 @@ export function baseOptions(): BaseLayoutProps {
     links: [
       {
         text: 'Documentation',
-        url: '/docs',
+        url: docsRoute,
         active: 'nested-url',
       },
       {

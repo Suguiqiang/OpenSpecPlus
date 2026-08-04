@@ -9,7 +9,7 @@
  * 例如：
  *   - proposal 的 generates 是 "proposal.md"
  *     -> 检查 change 目录下是否有 proposal.md 文件
- *   - specs 的 generates 是 "specs/**/*.md"
+ *   - specs 的 generates 是 "specs/**//*.md"
  *     -> 检查 change 目录下是否有 specs/ 子目录里的 .md 文件
  *
  * 调用方：instruction-loader.ts 的 loadChangeContext()
@@ -57,7 +57,7 @@ export function detectCompleted(graph: ArtifactGraph, changeDir: string): Comple
  *
  * 委托给 outputs.ts 的 artifactOutputExists，支持：
  *   - 简单路径（如 "proposal.md"）
- *   - glob 模式（如 "specs/**/*.md"）
+ *   - glob 模式（如 "specs/**//*.md"）
  *
  * @param generates - artifact 的 generates 字段（路径或 glob）
  * @param changeDir - change 目录的绝对路径

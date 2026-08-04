@@ -1,18 +1,19 @@
 // Single source of truth for the documentation site's content.
 //
 // The pages under `content/docs/` are NOT authored by hand. They are generated
-// from the repository's `docs/*.md` files by `scripts/sync-docs.mjs` (which runs
+// from the repository's `docs-cn/*.md` files by `scripts/sync-docs.mjs` (which runs
 // as the first step of `npm run build` / `npm run dev`). Edit the docs in
-// `../docs`, and the site mirrors them automatically — locally and in CI.
+// `../docs-cn`, and the site mirrors them automatically — locally and in CI.
 //
 // This manifest is the only place that decides which docs are published, their
 // slug/URL, their sidebar section and order, and their sidebar icon.
 //
-// `source` is a path relative to the repo root's `docs/` directory.
-// `slug`   is the page path under `/docs/` (may contain a folder, e.g. reference/cli).
+// `source` is a path relative to the repo root's `docs-cn/` directory.
+// `slug`   is the page path under `/docs-cn/` (may contain a folder, e.g. reference/cli).
 // `icon`   is any lucide-react icon name (unknown names simply render no icon).
 
-export const docsDir = '../docs';
+export const docsDir = '../docs-cn';
+export const docsSourceRoot = 'docs-cn';
 
 /** Ordered sections; each becomes a labeled group in the sidebar. */
 export const sections = [

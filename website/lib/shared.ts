@@ -8,15 +8,15 @@ export const appName = 'OpenSpec';
 export const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL || 'https://openspec.dev';
 
-export const docsRoute = '/docs';
+export const docsRoute = '/docs-cn';
 export const docsImageRoute = '/og/docs';
 export const docsContentRoute = '/llms.mdx/docs';
 
 // OpenSpec source repository, used for "edit this page" and GitHub links.
 export const gitConfig = {
-  user: 'Fission-AI',
-  repo: 'OpenSpec',
-  branch: 'main',
+  user: 'Suguiqiang',
+  repo: 'OpenSpecPlus',
+  branch: 'sgq/main',
 };
 
 export const links = {

@@ -31,7 +31,7 @@ export const ArtifactSchema = z.object({
   /** Artifact 的唯一 ID（如 "proposal"、"specs"），不能为空 */
   id: z.string().min(1, { error: 'Artifact ID is required' }),
   /**
-   * 该 artifact 生成的文件路径或 glob（如 "proposal.md"、"specs/**/*.md"）
+   * 该 artifact 生成的文件路径或 glob（如 "proposal.md"、"specs/**//*.md"）
    * 用于检测 artifact 是否已完成（文件存在即视为完成）
    */
   generates: z.string().min(1, { error: 'generates field is required' }),

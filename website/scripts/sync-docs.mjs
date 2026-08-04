@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generate the Fumadocs content set (`content/docs/**`) from the repository's
-// canonical Markdown in `../docs`. This is the mechanical mirror: docs/*.md is
+// canonical Markdown in `../docs-cn`. This is the mechanical mirror: docs-cn/*.md is
 // the single source of truth, and the site is a faithful, always-current view
 // of it. Runs as the first step of `build`/`dev`, and on a cadence in CI.
 //
@@ -8,31 +8,32 @@
 //   - derives the page title from the leading `# H1` (and strips that H1),
 //   - derives a short description from the first paragraph,
 //   - injects Fumadocs frontmatter (title / description / icon / githubSource),
-//   - rewrites internal `*.md` links to their `/docs/...` routes,
+//   - rewrites internal `*.md` links to their `/docs-cn/...` routes,
 //   - writes the result as a `.md` file (Fumadocs parses `.md` as plain
 //     Markdown, so `<placeholders>` and `{braces}` in the docs stay literal),
 //   - and emits `meta.json` sidebar ordering for the root and the reference folder.
 //
 // Generated files live under content/docs/ and are git-ignored — never edit
-// them by hand; edit ../docs instead.
+// them by hand; edit ../docs-cn instead.
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { docsDir, pages, sections } from '../docs.sync.config.mjs';
+import { docsDir, docsSourceRoot, pages, sections } from '../docs.sync.config.mjs';
 
 const websiteRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const docsRoot = resolve(websiteRoot, docsDir);
 const outRoot = join(websiteRoot, 'content', 'docs');
-const gitBranch = 'main';
-const gitBlobBase = 'https://github.com/Fission-AI/OpenSpec/blob';
+const docsRoute = '/docs-cn';
+const gitBranch = 'sgq/main';
+const gitBlobBase = 'https://github.com/Suguiqiang/OpenSpecPlus/blob';
 
-// Map every source path (relative to docs/, normalized) -> its /docs route,
+// Map every source path (relative to docs-cn/, normalized) -> its /docs-cn route,
 // so cross-doc `.md` links resolve to on-site pages.
 const routeBySource = new Map();
 for (const page of pages) {
   const normalized = posix.normalize(page.source);
-  routeBySource.set(normalized, page.slug === 'index' ? '/docs' : `/docs/${page.slug}`);
+  routeBySource.set(normalized, page.slug === 'index' ? docsRoute : `${docsRoute}/${page.slug}`);
 }
 
 function yamlQuote(value) {
@@ -96,8 +97,8 @@ function rewriteLinks(markdown, sourceRel) {
     const suffix = hash ? `#${hash}` : '';
     if (route) return `](${route}${suffix})`;
     // A link we don't publish (e.g. the repo-root README) — fall back to the
-    // source on GitHub, normalizing any `../` that escapes the docs/ folder.
-    const repoPath = posix.normalize(`docs/${resolved}`);
+    // source on GitHub, normalizing any `../` that escapes the docs-cn/ folder.
+    const repoPath = posix.normalize(`${docsSourceRoot}/${resolved}`);
     return `](${gitBlobBase}/${gitBranch}/${repoPath}${suffix})`;
   });
 }
@@ -106,14 +107,16 @@ function buildFrontmatter({ title, description, icon, source }) {
   const fm = [`title: ${yamlQuote(title)}`];
   if (description) fm.push(`description: ${yamlQuote(description)}`);
   if (icon) fm.push(`icon: ${icon}`);
-  fm.push(`githubSource: ${yamlQuote(`docs/${source}`)}`);
+  fm.push(`githubSource: ${yamlQuote(`${docsSourceRoot}/${source}`)}`);
   return `---\n${fm.join('\n')}\n---\n`;
 }
 
 function generatePage(page) {
   const srcPath = join(docsRoot, page.source);
   if (!existsSync(srcPath)) {
-    throw new Error(`Missing source doc: docs/${page.source} (referenced by slug "${page.slug}")`);
+    throw new Error(
+      `Missing source doc: ${docsSourceRoot}/${page.source} (referenced by slug "${page.slug}")`
+    );
   }
   const raw = readFileSync(srcPath, 'utf8');
   const fallbackTitle = page.slug.split('/').pop().replace(/-/g, ' ');

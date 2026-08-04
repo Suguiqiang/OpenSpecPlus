@@ -7,7 +7,7 @@
  * 支持两种格式：
  *   1. 简单路径：如 "proposal.md"、"tasks.md"
  *      -> 直接检查文件是否存在
- *   2. glob 模式：如 "specs/**/*.md"、"specs/*.md"
+ *   2. glob 模式：如 "specs/**//*.md"、"specs//*.md"
  *      -> 用 fast-glob 库展开匹配
  *
  * 调用方：
