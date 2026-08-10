@@ -31,7 +31,7 @@ importers:
         version: 8.2.0
       posthog-node:
         specifier: ^5.46.0
-        version: 5.46.0
+        version: 5.47.7
       yaml:
         specifier: ^2.8.3
         version: 2.9.0
@@ -497,11 +497,11 @@ packages:
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
 
-  '@posthog/core@1.45.0':
-    resolution: {integrity: sha512-nP5FGwkIk8Ngy45BHzwN/kBGV6jqNZINn+iSge5CbdjMevZsEYK8OG3QOSyysml3yWn4tsRJroGi76+HrBIJuQ==}
+  '@posthog/core@1.47.0':
+    resolution: {integrity: sha512-LW62V+9yx7G7mLd+EYpwW0PiaPZI8XRJ1tLuhw+9fXHpugLp8XQD5JuCQ2kIXvoUfyx1DpKfGQY3dUnzMOIn7Q==}
 
-  '@posthog/types@1.398.0':
-    resolution: {integrity: sha512-sJMkl4k+u8yS/0fjHsKqE9xTdsAh30a2WvgChiptellnVoE0e8QJKFgqOMD2sk8FaEArPdeFklAhXvmENAt3Sg==}
+  '@posthog/types@1.402.2':
+    resolution: {integrity: sha512-ZZTiS4dLwF4/D0YTzS3gGSLFnhuNOY5yu4d9VGS9trGe5GW6FjIXo20p18K5BPW2RZSYSld8sdnSAY3AUXleUQ==}
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     resolution: {integrity: sha512-6o7ZLZK+BeenkZCFNDXqpbjw9bD6nuWonvS/lwQJp7NoVVxm6p3qE7qQ5jGuBjiFsgvqjD8mZAU5oWxTmbOeOg==}
@@ -1298,8 +1298,8 @@ packages:
     resolution: {integrity: sha512-KBDEIpLrvpv16pp3K0Fw+UCoZfopFjjgeB+0tA/aaThfEE74kKDLrgg603YvOWJyg3+WYtyq3xYsQWsIyZlPqQ==}
     engines: {node: ^10 || ^12 || >=14}
 
-  posthog-node@5.46.0:
-    resolution: {integrity: sha512-Uzkth327Qxho9X55UygGUjVKCF9oaox90HQpa0o9YNjwLjbQmXttgHChzAtjAcsMw/ZKr3NnHC3xcAaS5dXwEQ==}
+  posthog-node@5.47.7:
+    resolution: {integrity: sha512-ZfvGL2DQB9mQmM+9hFRtX8h4WeXRANA6ASK/6eLJuAg2BPxvLpihRyB8pmgFm6Ye+t2drZJkDklEARPj/3OWAA==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       rxjs: ^7.0.0
@@ -2058,11 +2058,11 @@ snapshots:
 
   '@polka/url@1.0.0-next.29': {}
 
-  '@posthog/core@1.45.0':
+  '@posthog/core@1.47.0':
     dependencies:
-      '@posthog/types': 1.398.0
+      '@posthog/types': 1.402.2
 
-  '@posthog/types@1.398.0': {}
+  '@posthog/types@1.402.2': {}
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     optional: true
@@ -2812,9 +2812,9 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  posthog-node@5.46.0:
+  posthog-node@5.47.7:
     dependencies:
-      '@posthog/core': 1.45.0
+      '@posthog/core': 1.47.0
 
   prelude-ls@1.2.1: {}
 
